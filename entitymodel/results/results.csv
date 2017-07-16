@@ -1,0 +1,2 @@
+# good products;# bad products;TP;FN;FP;TN;precision;recall;f1;accuracy
+126;114;93;33;18;96;0.837837837838;0.738095238095;0.784810126582;0.7875
