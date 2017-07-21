@@ -85,7 +85,7 @@ df.fillna(0,inplace=True)
 Predict URL model by choosing correct classifier per site. Does URL lead to product - yes/no?
 '''
 X_url = extract_url_features(pd.DataFrame(df['url'],index=df.index)) # data + features for URL model
-df_url_pred = pd.DataFrame(index=df.index, columns=['prediction']) # saves prediction of url model
+df_url_pred = pd.DataFrame(index=df.index, columns=['prediction','predict_proba']) # saves prediction of url model
 avg_proba = pd.DataFrame().from_csv('data/avg_proba.csv') # contains avg domain scores
 
 for i,r in X_url.iterrows():
@@ -97,12 +97,18 @@ for i,r in X_url.iterrows():
         url_pred = url_clf.predict(r.drop('url'))
         df_domain_score = avg_proba[avg_proba['domain'] == domain[0:domain.index('.')]]
         df_url_pred.loc[i, 'predict_proba'] = (url_pred_score[0][1] + df_domain_score['avg_proba'].iloc[0]) / 2 # combine predicted probability with average probability per domain
-        df_url_pred.loc[i, 'prediction'] = url_pred[0] # predicted label
+        df_url_pred.loc[i, 'prediction'] = 1 if url_pred_score[0][1] > 0.5 else 0 # predicted label
 
 #df_url_pred.fillna(0, inplace=True)
 #df_url_pred.loc[df_url_pred['predict_proba'] > 0.5,'prediction'] = 1
 #df_url_pred.loc[df_url_pred['predict_proba'] <= 0.5,'prediction'] = 0
-
+mask = df_url_pred.notnull()
+y_test_url = df[mask['prediction']]['label']
+X_test_url = df_url_pred.dropna()['prediction'].astype(int)
+recall_url = recall_score(y_test_url, X_test_url)
+f1_url = f1_score(y_test_url, X_test_url)
+accuracy_url = accuracy_score(y_test_url, X_test_url)
+precision_url = precision_score(y_test_url, X_test_url)
 
 '''
 Apply entity model on remaining URLs. Based on output from URL model.
@@ -129,3 +135,7 @@ fn = cm[1][0]
 tp = cm[1][1]
 fp = cm[0][1]
 print ('Precision ' + str(precision) + ' Recall ' + str(recall) + ' F1 ' + str(f1) + ' Accuracy ' + str(accuracy))
+print ('tp ' + str(tp), 'tn ' + str(tn), 'fn ' + str(fn), 'fp ' + str(fp))
+
+print ('Precision ' + str(precision_url) + ' Recall ' + str(recall_url) + ' F1 ' + str(f1_url) + ' Accuracy ' + str(accuracy_url))
+

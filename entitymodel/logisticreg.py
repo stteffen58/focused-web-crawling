@@ -90,7 +90,7 @@ df = pd.DataFrame.from_csv('%sdataframe.csv' % result_path, sep=',')
 df = normalize_rating(df)
 df = df.fillna(value=0)
 print (df.head())
-drop_columns = ['label', 'domain', 'name', 'url']
+drop_columns = ['label', 'domain', 'url']
 X = df.drop(drop_columns, axis=1)
 y = df['label']
 
@@ -112,8 +112,11 @@ for train_index, test_index in sss.split(X, y):
     y_train, y_test = y.iloc[train_index], y.iloc[test_index]
 
     model.fit(X_train, y_train)
-    prediction = model.predict(X_test)
+    print ('shape')
+    print (X_train.shape)
     print (model.coef_)
+    #model.coef_ = np.array([[1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]])
+    prediction = model.predict(X_test)
 
 joblib.dump(model, '%sentity-model.pkl' % result_path)
 
@@ -179,7 +182,7 @@ def frange(x, y, jump):
 
 fpr,tpr,thresholds = roc_curve(y_test,proba_1,pos_label=1)
 df_threshold = pd.DataFrame(data=np.transpose(np.vstack((tpr, thresholds))))
-print (df_threshold)
+#print (df_threshold)
 plot_roc = sns.jointplot('false positives','true positives',data=pd.DataFrame(data=np.transpose(np.vstack((fpr,tpr))),
                                                                    columns=['false positives','true positives']))
 sns.plt.xticks([0.0,1.0])
@@ -197,5 +200,5 @@ a = avg_proba.to_frame()
 a.reset_index(inplace=True)
 a.columns = ['domain','avg_proba']
 a.to_csv('%savg_proba.csv' % result_path)
-print ('')
 
+print ('tp ' + str(tp), 'tn ' + str(tn), 'fn ' + str(fn), 'fp ' + str(fp))
