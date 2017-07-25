@@ -155,7 +155,10 @@ class StandardMicrodataExtractor:
             tags = sibling.find('table')  # check if table is current element or if table is child element
             if not tags:
                 tags = sibling  # table is current element
-            table = ''.join(tags.strings).replace('\n', ' ').replace('\t', '').strip()
+            try:
+                table = ''.join(tags.strings).replace('\n', ' ').replace('\t', '').strip()
+            except:
+                return (0,0)
             table = re.sub(' +', ' ', table)  # remove double whitespaces
             table_length += (len(table),)
             rowCount = 0
@@ -690,13 +693,32 @@ def evaluate_feautures():
             missing_feat['domain'] = folder
             writer.writerow(missing_feat)
 
+def normalize_rating(df):
+    domains = set()
+    rows = pd.DataFrame()
+    for i,row in enumerate(df.iterrows()):
+        domain_new = row[1][0]
+        if domain_new not in domains:
+            domains.add(domain_new)
+            rows = pd.DataFrame(data=df[df['domain'] == domain_new], index=df[df['domain'] == domain_new].index)
+            min = rows['rating_value'].min()
+            max = rows['rating_value'].max()
+            for index in rows.index:
+                if not pd.isnull(rows.loc[index,'rating_value']):
+                    try:
+                        rating = (rows.loc[index,'rating_value'] - min) / (max - min)
+                        df.loc[index,'rating_value'] = rating
+                    except:
+                        df.loc[index,'rating_value'] = 0
+    return df
+
 def build_dataframe():
     #columns = ['domain','url','isCovered','coverCount','name','rating_count','rating_value','has_image','identifier_count','list_length',
     #            'list_rows','table_length','table_rows','description_length','label']
     columns = ['domain','url','name','rating_count','rating_value','has_image','identifier_count','list_length',
-                'list_rows','table_length','table_rows','description_length','label']
+                'list_rows','table_length','table_rows','description_length','prediction']
 
-    data = []
+    df_finale = pd.DataFrame(columns=columns)
     path = 'database/'
 
     domain = sys.argv[1]
@@ -724,22 +746,29 @@ def build_dataframe():
             identifier_count = me.get_identifier_count()
             table_length = me.get_table_length()
             description_length = me.get_description_length()  # called at the end because otherwise it may remove tables and lists
-            row = [name, float(rating_count), float(rating_value), int(has_image), int(identifier_count), float(list_length[0]),
-                   float(list_length[1]), float(table_length[0]), float(table_length[1]), float(description_length)]
+            row = [name, rating_count, rating_value, has_image, identifier_count, list_length[0],
+                   list_length[1], table_length[0], table_length[1], description_length]
         except Exception as err:
+            print (err)
             pass
-        #print (row)
-        prediction = entity_model.predict_proba(np.array([row]))
-        row.append(prediction)
-        row = [domain.lower(),url] + row
-        data.append(row)
+        row = [0,0] + row + [0]
+        row = [r if r else 0 for r in row]
+        np_array = np.array([row],dtype=np.float64)
+        df = pd.DataFrame(data=np_array,columns=columns)
+        df = df.fillna(value=0)
+        df = normalize_rating(df)
+        df = df.fillna(value=0)
+        prediction = entity_model.predict_proba(df.drop(['domain','url','prediction'],axis=1))
+        df['prediction'] = prediction[0][1]
+        df['domain'] = domain
+        df['url'] = url
+        df_finale = pd.concat([df_finale,df])
         page_count += 1
-        sys.stdout.write('\r'+str(page_count))
-        sys.stdout.flush()
-
-    df = pd.DataFrame(data=data, columns=columns)
-    df.to_csv('results/dataframe.csv')
+        sys.stdout.write('\r' + str(page_count))
+        sys.stdout.flush()    
+    #df_final = pd.DataFrame(data=data,columns=columns)
+    df_finale.to_csv('results/'+ domain.lower()  +'.csv')
     print ('done')
-    return df
+    return df_finale
 
 build_dataframe()
