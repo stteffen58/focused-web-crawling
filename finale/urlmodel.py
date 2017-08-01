@@ -1,4 +1,5 @@
 import os
+import sys
 import csv
 import re
 import sys
@@ -6,8 +7,6 @@ import pandas as pd
 import numpy as np
 
 from urllib.parse import urlparse
-
-from finale import extractorurl
 
 from ast import literal_eval as make_tuple
 
@@ -28,7 +27,22 @@ from sklearn.model_selection import StratifiedShuffleSplit
 def url_tokenizer():
     pass
 
-            
+
+def getUrlPath(url):
+    parsed = urlparse(url)
+    path = parsed.path
+    return path
+
+
+def getUrlQuery(url):
+        parsed = urlparse(url)
+        query = parsed.query
+        if query:
+                return query
+        else:
+                return ' '
+
+
 def extract_features(df):
     url_lengths = []
     path_length = []
@@ -38,7 +52,7 @@ def extract_features(df):
             url_lengths.append(len(url))
         except:
             print (url)
-        url_path = extractorurl.getUrlPath(url)
+        url_path = .getUrlPath(url)
         df.loc[i,'url_path'] = url_path
         path_length.append(len(url_path))
 
@@ -51,7 +65,7 @@ def extract_features(df):
                 titel_length = len(tokens[1])
         df.loc[i,'title_length'] = titel_length
         
-        query = extractorurl.getUrlQuery(url)
+        query = getUrlQuery(url)
         amount_parameters = 0
         query_length = 0
         if query:
@@ -78,7 +92,8 @@ def extract_features(df):
 
 
 #pd.options.display.max_colwidth = 100
-path = 'balanced-samples/'
+experiment_name = sys.argv[1]
+path = experiment_name + '/data/'
 output = []
 
 for file in os.listdir(path):
@@ -92,6 +107,8 @@ for file in os.listdir(path):
     df = df.dropna()
     df.loc[df['prediction'] >= 0.5,'label'] = 1
     df.loc[df['prediction'] < 0.5, 'label'] = 0
+    print (len(df[df['prediction'] >= 0.5]))
+    print (len(df[df['prediction'] < 0.5]))
     X = df.drop(['url','prediction','domain','label','url_path'],axis=1)
     y = df['label']
     sss = StratifiedShuffleSplit(n_splits=1, test_size=0.5, random_state=0)
@@ -99,9 +116,6 @@ for file in os.listdir(path):
         '''
         calculate url features based on training data of positive class
         '''
-        #df = calc_url_features(df,train_index)
-
-        #X_url = df.drop(drop_columns, axis=1)
         X_train, X_test = X.iloc[train_index], X.iloc[test_index]
         y_train, y_test = df['prediction'].iloc[train_index], df['prediction'].iloc[test_index]
 
@@ -109,16 +123,14 @@ for file in os.listdir(path):
         model.fit(X_train, y_train)
         prediction = model.predict(X_test)
 
-    joblib.dump(model, 'misc_data/' + domain + '.pkl')
+    joblib.dump(model, experiment_name + '/pickles/' + domain + '.pkl')
     
     error = mse(y_test,prediction)
-#    print (y_test[0:10])
-#    print (prediction[0:10])
-    output.append([domain,len(y_test[y_test == 1]),len(y_test[y_test == 0]),error])
+    output.append([domain,len(df[(df.index.isin(test_index)) & (df['label'] == 1)]),len(df[(df.index.isin(test_index)) & (df['label'] == 0)]),error])
 
-f = open('results_svm_terms.csv','w')
+f = open(experiment_name + '/results.csv','w')
 writer = csv.writer(f,delimiter=',',quotechar='|',quoting=csv.QUOTE_MINIMAL)
-#if os.path.getsize(path + 'results_svm.csv') == 0:
+
 writer.writerow(['domain','#products','#nonproducts','mse'])
 
 for out in output:

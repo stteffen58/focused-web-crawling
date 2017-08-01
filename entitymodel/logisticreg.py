@@ -115,7 +115,7 @@ for train_index, test_index in sss.split(X, y):
     print ('shape')
     print (X_train.shape)
     print (model.coef_)
-    #model.coef_ = np.array([[1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]])
+    #model.coef_ = np.array([[0.1,0.1,0.1,0.1,0.2,0,0.4,0,0,0]])
     prediction = model.predict(X_test)
 
 joblib.dump(model, '%sentity-model.pkl' % result_path)
