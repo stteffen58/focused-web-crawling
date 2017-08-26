@@ -20,7 +20,7 @@ predicts score using entity model. sys.argv[1] = <experiment name>, for example 
 #    print (file)
 #    df = pd.DataFrame.from_csv(inputpath + file)
 def predict(df,entitymodel):
-    prediction = entitymodel.predict_proba(df.drop(['label','prediction','domain','url'],axis=1))
+    prediction = entitymodel.predict_proba(df)
     return prediction[0][1]
     #df['prediction'] = prediction
     #df.to_csv(outputpath + file)

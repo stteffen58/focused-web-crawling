@@ -3,6 +3,7 @@ import sys
 import csv
 import re
 import sys
+import csv
 import pandas as pd
 import numpy as np
 import matplotlib
@@ -49,27 +50,28 @@ def getUrlQuery(url):
                 return ' '
 
 
-def extract_features(df):
+def extract_features(df,domain):
     url_lengths = []
     path_length = []
+    df_url = pd.DataFrame(columns=['amount_parameters','query_length','url_length','path_length','average_deviation','average_ratio'])
     for i,row in df.iterrows():
-        url = row[0]
+        url = row[1]
         try:
             url_lengths.append(len(url))
         except:
             print (url)
         url_path = getUrlPath(url)
-        df.loc[i,'url_path'] = url_path
+        #df.loc[i,'url_path'] = url_path
         path_length.append(len(url_path))
 
-        titel_length = 0
-        tokens = url_path.split('/')
-        tokens = [t for t in tokens if  t]
-        if len(tokens) > 1:
-            comp = re.split('[-.,!?]',tokens[1])
-            if len(comp) > 2:
-                titel_length = len(tokens[1])
-        df.loc[i,'title_length'] = titel_length
+#        titel_length = 0
+#        tokens = url_path.split('/')
+#        tokens = [t for t in tokens if  t]
+#        if len(tokens) > 1:
+#            comp = re.split('[-.,!?]',tokens[1])
+#            if len(comp) > 2:
+#                titel_length = len(tokens[1])
+#        df.loc[i,'title_length'] = titel_length
         
         query = getUrlQuery(url)
         amount_parameters = 0
@@ -78,23 +80,27 @@ def extract_features(df):
             parameters = query.split('&')
             amount_parameters = len(parameters)
             query_length = sum(len(p) for p in parameters)
-        df.loc[i,'amount_parameters'] = amount_parameters
-        df.loc[i, 'query_length'] = query_length
+        df_url.loc[i,'amount_parameters'] = amount_parameters
+        df_url.loc[i, 'query_length'] = query_length
 
-    df['url_length'] = pd.Series(url_lengths,index=df.index)
-    df['path_length'] = pd.Series(path_length, index=df.index)
+    df_url['url_length'] = pd.Series(url_lengths,index=df.index)
+    df_url['path_length'] = pd.Series(path_length, index=df.index)
 
-    avg = sum(l for l in url_lengths) / len(url_lengths)
+    avg = float(float(sum(l for l in url_lengths)) / float(len(url_lengths)))
+    # save avg to file
+    with open('misc/' + domain + '-avg','w') as f:
+        f.write(str(avg))
+
     dev = [l - avg for l in url_lengths]
-    df['average_deviation'] = pd.Series(dev,index=df.index)
+    df_url['average_deviation'] = pd.Series(dev,index=df.index)
 
-    ratio = [l/avg for l in url_lengths]
-    df['average_ratio'] = pd.Series(ratio, index=df.index)
+    ratio = [float(l)/float(avg) for l in url_lengths]
+    df_url['average_ratio'] = pd.Series(ratio, index=df.index)
 
     #vectorizer = HashingVectorizer(stop_words='english',analyzer='word',n_features=2**15)
     #doc_term_matrix = vectorizer.fit_transform(df['url'])
     #df_final = pd.concat([df,pd.DataFrame(doc_term_matrix.toarray(),index=df.index)],axis=1)
-    return df
+    return pd.concat([df,df_url],axis=1)
 
 
 #pd.options.display.max_colwidth = 100
@@ -110,7 +116,8 @@ for file in os.listdir(path):
 
     df = pd.DataFrame().from_csv(path + file)
     df = df.dropna()
-    steps = np.arange(0.01, 1.0, 0.01)
+   # steps = np.arange(0.3, 0.4, 0.1)
+    steps = [0.3]
     errors = np.array([]) # collects all mse per domain
     abs_sample_size_pos = np.array([]) # collects samplesize for final statistics
     abs_sample_size_neg = np.array([])
@@ -119,29 +126,34 @@ for file in os.listdir(path):
         sample = balancedsample.balanced_subsample(df.drop(['label'],axis=1).as_matrix(),df['label'].as_matrix(),subsample_size=size)
         data = np.hstack((sample[0],sample[1].reshape(len(sample[1]),1)))
         df_sample = pd.DataFrame(data=data,columns=df.columns)
-        df_sample = extract_features(df_sample)
+        df_sample = extract_features(df_sample,domain)
         df_sample = df_sample.dropna()
         
-        df_sample.loc[df_sample['prediction'] >= 0.5,'label'] = 1
-        df_sample.loc[df_sample['prediction'] < 0.5, 'label'] = 0
+        df_sample.loc[df_sample['prediction'] > 0.5,'label'] = 1
+        df_sample.loc[df_sample['prediction'] <= 0.5, 'label'] = 0
 
         abs_sample_size_pos = np.append(abs_sample_size_pos, len(df_sample['prediction'] >= 0.5))
         abs_sample_size_neg = np.append(abs_sample_size_neg, len(df_sample['prediction'] < 0.5))
 
-        X = df_sample.drop(['url','prediction','domain','label','url_path'],axis=1)
+        X = df_sample.drop(['url','prediction','domain','label','name', 'rating_count', 'rating_value', 'has_image', 'identifier_count', 'list_length',
+               'list_rows', 'table_length', 'table_rows', 'description_length', 'price'],axis=1)
         y = df_sample['label']
         sss = StratifiedShuffleSplit(n_splits=1, test_size=0.5, random_state=0)
-        robust_scaler = RobustScaler()
+#        robust_scaler = StandardScaler()
         for train_index, test_index in sss.split(X, y):
             X_train, X_test = X.iloc[train_index], X.iloc[test_index]
             y_train, y_test = df['prediction'].iloc[train_index], df['prediction'].iloc[test_index]
-            #y_train, y_test = y.iloc[train_index], y.iloc[test_index]
-
+            urls = df_sample.iloc[train_index]['url']
             model = lr()
-            Xtr_r = robust_scaler.fit_transform(X_train)
-            model.fit(Xtr_r, y_train)
-            Xte_r = robust_scaler.transform(X_test)
-            prediction = model.predict(Xte_r)
+            model.fit(X_train, y_train)
+            prediction = model.predict(X_test)
+            
+            # urls which are ignored during simulation
+            urls = df_sample.iloc[train_index]['url']
+            f = open('misc/' + domain + '-train.csv','w')
+            writer = csv.writer(f, delimiter=',', quotechar='"', quoting=csv.QUOTE_NONNUMERIC)
+            writer.writerow(urls)
+            f.close()
 
         joblib.dump(model, experiment_name + '/pickles/' + domain  + '.pkl')
 
