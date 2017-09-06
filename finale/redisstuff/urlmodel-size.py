@@ -9,13 +9,15 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import seaborn
+import ast
+import time
 
 from urllib.parse import urlparse
 
 from ast import literal_eval as make_tuple
 
 from sklearn.feature_extraction.text import HashingVectorizer
-from sklearn.naive_bayes import GaussianNB
+from sklearn.naive_bayes import GaussianNB,MultinomialNB,BernoulliNB
 from sklearn.svm import SVC
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
@@ -51,11 +53,13 @@ def getUrlQuery(url):
 
 
 def extract_features(df,domain):
+    '''
     url_lengths = []
     path_length = []
     df_url = pd.DataFrame(columns=['amount_parameters','query_length','url_length','path_length','average_deviation','average_ratio'])
+    index = df.columns.get_loc('url')
     for i,row in df.iterrows():
-        url = row[1]
+        url = row[index]
         try:
             url_lengths.append(len(url))
         except:
@@ -96,26 +100,29 @@ def extract_features(df,domain):
 
     ratio = [float(l)/float(avg) for l in url_lengths]
     df_url['average_ratio'] = pd.Series(ratio, index=df.index)
-
-    #vectorizer = HashingVectorizer(stop_words='english',analyzer='word',n_features=2**15)
-    #doc_term_matrix = vectorizer.fit_transform(df['url'])
-    #df_final = pd.concat([df,pd.DataFrame(doc_term_matrix.toarray(),index=df.index)],axis=1)
-    return pd.concat([df,df_url],axis=1)
+    '''
+    df['text'] = df.apply(lambda row: ast.literal_eval(row['text'])[0],axis=1)    
+    #combined = df['url'] + ' ' + df['text']
+    vectorizer = HashingVectorizer(stop_words='english',analyzer='word',n_features=2**10)
+    doc_term_matrix = vectorizer.fit_transform(df['url'])
+    #df_final = pd.concat([df[['prediction','label','url']],pd.DataFrame(doc_term_matrix.toarray(),index=df.index)],axis=1)
+    return doc_term_matrix
+    #return pd.concat([df,df_url],axis=1)#,pd.DataFrame(doc_term_matrix.toarray(),index=df.index)],axis=1)
 
 
 #pd.options.display.max_colwidth = 100
 experiment_name = sys.argv[1]
 
-path = 'dataframes/'
+path = 'dataframes/' + experiment_name + '/'
 
 for file in os.listdir(path):
     if 'target' in file or 'shop' in file:
         continue
     print(file)
     domain = file[0:file.rindex('.')]
-
-    df = pd.DataFrame().from_csv(path + file)
+    df = pd.read_csv(path + file, quotechar='|',)
     df = df.dropna()
+    df = df.drop(['Unnamed: 0'],axis=1)
    # steps = np.arange(0.3, 0.4, 0.1)
     steps = [0.3]
     errors = np.array([]) # collects all mse per domain
@@ -126,28 +133,35 @@ for file in os.listdir(path):
         sample = balancedsample.balanced_subsample(df.drop(['label'],axis=1).as_matrix(),df['label'].as_matrix(),subsample_size=size)
         data = np.hstack((sample[0],sample[1].reshape(len(sample[1]),1)))
         df_sample = pd.DataFrame(data=data,columns=df.columns)
-        df_sample = extract_features(df_sample,domain)
+        doc_term_matrix = extract_features(df_sample,domain)
         df_sample = df_sample.dropna()
         
-        df_sample.loc[df_sample['prediction'] > 0.5,'label'] = 1
-        df_sample.loc[df_sample['prediction'] <= 0.5, 'label'] = 0
+        #df_sample.loc[df_sample['prediction'] > 0.5,'label'] = 1
+        #df_sample.loc[df_sample['prediction'] <= 0.5, 'label'] = 0
 
         abs_sample_size_pos = np.append(abs_sample_size_pos, len(df_sample['prediction'] >= 0.5))
         abs_sample_size_neg = np.append(abs_sample_size_neg, len(df_sample['prediction'] < 0.5))
-
+        #X = df_sample.drop(['url','prediction','label'],axis=1)
         X = df_sample.drop(['url','prediction','domain','label','name', 'rating_count', 'rating_value', 'has_image', 'identifier_count', 'list_length',
-               'list_rows', 'table_length', 'table_rows', 'description_length', 'price'],axis=1)
+               'list_rows', 'table_length', 'table_rows', 'description_length', 'price', 'text'],axis=1)
         y = df_sample['label']
         sss = StratifiedShuffleSplit(n_splits=1, test_size=0.5, random_state=0)
 #        robust_scaler = StandardScaler()
         for train_index, test_index in sss.split(X, y):
-            X_train, X_test = X.iloc[train_index], X.iloc[test_index]
-            y_train, y_test = df['prediction'].iloc[train_index], df['prediction'].iloc[test_index]
+            # X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+            X_train, X_test = doc_term_matrix[train_index], doc_term_matrix[test_index]
+#            y_train, y_test = df['prediction'].iloc[train_index], df['prediction'].iloc[test_index]
+            y_train, y_test = df['label'].iloc[train_index], df['label'].iloc[test_index]
             urls = df_sample.iloc[train_index]['url']
-            model = lr()
-            model.fit(X_train, y_train)
-            prediction = model.predict(X_test)
-            
+            model = GaussianNB()
+            model.fit(X_train.toarray(), y_train)
+            prediction = model.predict(X_test.toarray())
+            probas = model.predict_proba(X_test.toarray())
+#            for i,p in enumerate(probas):
+#                print (p)
+#                time.sleep(1)
+#                if i == 10:
+#                    break
             # urls which are ignored during simulation
             urls = df_sample.iloc[train_index]['url']
             f = open('misc/' + domain + '-train.csv','w')
@@ -155,14 +169,28 @@ for file in os.listdir(path):
             writer.writerow(urls)
             f.close()
 
-        joblib.dump(model, experiment_name + '/pickles/' + domain  + '.pkl')
+        joblib.dump(model, experiment_name + '/pickles/np-url-' + domain  + '.pkl')
+        
+        #error = mse(y_test,prediction)
+        #errors = np.append(errors, error)
+        '''
+        predict_labels = []
+        print (prediction)
+        for e in prediction:
+            if e[1] > 0.5:
+                predict_labels.append(1)
+            else:
+                predict_labels.append(0)
+        print (predict_labels)
+        '''
+        precision = precision_score(df['label'].iloc[test_index],prediction)
+        recall = recall_score(df['label'].iloc[test_index],prediction)
+        print (precision,recall)
 
-        error = mse(y_test,prediction)
-        errors = np.append(errors, error)
-    data_final = np.column_stack((np.array([domain for s in steps]),steps,errors,abs_sample_size_pos,abs_sample_size_neg))
-    df_error = pd.DataFrame(data=data_final,columns=['domain','size','error','size_pos','size_neg'])
-    df_error.to_csv(experiment_name + '/' + domain + '-error.csv')
-    data_plot = np.column_stack((steps,errors))
-    error_plot = seaborn.lmplot(x='size',y='error',data=pd.DataFrame(data=data_plot,columns=['size','error']), fit_reg=False, palette=seaborn.xkcd_rgb["pale red"], markers='X')
+#    data_final = np.column_stack((np.array([domain for s in steps]),steps,errors,abs_sample_size_pos,abs_sample_size_neg))
+#    df_error = pd.DataFrame(data=data_final,columns=['domain','size','error','size_pos','size_neg'])
+#    df_error.to_csv(experiment_name + '/' + domain + '-error.csv')
+#    data_plot = np.column_stack((steps,errors))
+#    error_plot = seaborn.lmplot(x='size',y='error',data=pd.DataFrame(data=data_plot,columns=['size','error']), fit_reg=False, palette=seaborn.xkcd_rgb["pale red"], markers='X')
     #seaborn.plt.ylim(-0.5,1.5)
-    error_plot.savefig(experiment_name + '/' + domain + '-error.png')
+#    error_plot.savefig(experiment_name + '/' + domain + '-error.png')

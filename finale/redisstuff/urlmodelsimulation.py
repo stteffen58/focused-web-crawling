@@ -29,6 +29,8 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler, RobustScaler
 
 
+vectorizer = HashingVectorizer(stop_words='english',analyzer='word',n_features=2**10)
+
 def url_tokenizer():
     pass
 
@@ -48,7 +50,8 @@ def getUrlQuery(url):
                 return ' '
 
 
-def extract_features(url,avg):
+def extract_features(tuple_list):
+    '''
     df = pd.DataFrame(columns=['amount_parameters','query_length','url_length','path_length','average_deviation','average_ratio'])
     url_length = len(url)
     url_path = getUrlPath(url)
@@ -74,7 +77,12 @@ def extract_features(url,avg):
     ratio = url_length / float(avg)
 
     df.loc[0] = [amount_parameters,query_length,url_length,path_length,dev,ratio]
-    #vectorizer = HashingVectorizer(stop_words='english',analyzer='word',n_features=2**15)
-    #doc_term_matrix = vectorizer.fit_transform(df['url'])
+    '''
+
+    docs = []
+    for t in tuple_list:
+        doc = t[0] + ' ' + t[1] + ' ' + t[2] # url anchor and text
+        docs.append(doc.strip())
+    doc_term_matrix = vectorizer.fit_transform(docs)
     #df_final = pd.concat([df,pd.DataFrame(doc_term_matrix.toarray(),index=df.index)],axis=1)
-    return df
+    return doc_term_matrix

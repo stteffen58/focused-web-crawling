@@ -39,15 +39,12 @@ columns = ['domain','url','name','rating_count','rating_value','rating_ratio','h
 
 df_full = pd.DataFrame(columns=columns)
 vectorizer = HashingVectorizer(stop_words='english',analyzer='word',n_features=2**15)
+ser = pd.Series()
 error = 0
 i = 0
-database_size = r.dbsize()
-print (database_size)
 for key in r.scan_iter():
     entry = r.lrange(key,0,3)
     row = ast.literal_eval(entry[0].decode('utf-8'))
-    if i > 100000: # create dataframe with fixed size
-        break
     if row:
         sys.stdout.write('\r' + str(i))
         sys.stdout.flush()
@@ -56,9 +53,11 @@ for key in r.scan_iter():
             text = str(entry[3].decode('utf-8')).strip()
         except:
             error += 1
-            continue
+            print (key)
+            print (entry)
+            break
         doc = [anchor+text]
-        row = row + [doc,0,0] # set column prediction and label to 0
+        row = row + [text,0,0] # set column prediction and label to 0
         df = pd.DataFrame(data=[row],columns=columns)
 
         #doc_term_matrix = vectorizer.fit_transform(doc)

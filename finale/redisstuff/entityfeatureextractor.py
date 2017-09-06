@@ -93,13 +93,17 @@ class StandardMicrodataExtractor:
             for s in rating:
                 if s.isnumeric() or s == '.':
                     num_rating += s
-        return num_rating
+        if num_rating:
+            return float(num_rating)
+        return 0.0
+
 
     def has_product_image(self):
         tags = self.product.find(re.compile('.+'), attrs={ITEMPROP: 'image'})
         if not tags:
             return 0
         return 1
+
 
     def get_rating_count(self):
         tags = self.product.find(re.compile('.+'), attrs={ITEMPROP:['ratingCount', 'reviewCount']})
@@ -109,7 +113,10 @@ class StandardMicrodataExtractor:
             rating_count = ''.join(tags.strings).strip()
             if not rating_count:
                 rating_count = tags['content']
-        return rating_count.replace(',','.')
+        count = rating_count.replace(',','.')
+        if count:
+            return float(count)
+        return 0.0
 
     def get_identifier_count(self):
         tags = self.product.find(re.compile('.+'), attrs={ITEMPROP:[re.compile('gtin.*'), 'mpn', 'model']})
@@ -783,7 +790,7 @@ def build_dataframe():
 
 
 def extract_row(domain,url,html):
-    row = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    row = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     c = eval(domain)
     try:
         me = c(html)
@@ -791,12 +798,17 @@ def extract_row(domain,url,html):
         list_length = me.get_list_length()
         rating_value = me.get_rating_value()
         rating_count = me.get_rating_count()
+        rating_ratio = 0.0
+        if rating_count and rating_value:
+            rating_ratio = rating_count/rating_value
+        else:
+            rating_ratio = 0.0
         has_image = me.has_product_image()
         identifier_count = me.get_identifier_count()
         table_length = me.get_table_length()
         description_length = me.get_description_length()  # called at the end because otherwise it may remove tables and lists
         price = me.get_price()
-        row = [name, rating_count, rating_value, has_image, identifier_count, list_length[0],
+        row = [name, rating_count, rating_value, rating_ratio, has_image, identifier_count, list_length[0],
         list_length[1], table_length[0], table_length[1], description_length, price]
     except Exception as err:
 #        print (err)
